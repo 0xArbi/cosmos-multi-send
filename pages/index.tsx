@@ -1,6 +1,5 @@
 import { Asset, AssetList } from "@chain-registry/types";
 import { StdFee } from "@cosmjs/amino";
-import { SigningStargateClient } from "@cosmjs/stargate";
 import { useWallet } from "@cosmos-kit/react";
 import BigNumber from "bignumber.js";
 import { assets as allAssets } from "chain-registry";
@@ -16,14 +15,13 @@ import {
   Input,
   Stack,
   Text,
-  Toast,
   useToast,
 } from "@chakra-ui/react";
 
+import { SigningCosmWasmClient } from "@cosmjs/cosmwasm-stargate";
 import { cosmos } from "juno-network";
 import Head from "next/head";
 import { WalletSection } from "../components";
-import { SigningCosmWasmClient } from "@cosmjs/cosmwasm-stargate";
 
 const FILTERED_CHAINS = [
   "avalanche",
