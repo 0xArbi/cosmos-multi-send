@@ -264,7 +264,11 @@ export default function Home() {
             A utility tool for transferring tokens to a large number of
             recipients, works with CW20 tokens as well as native assets.
           </Text>
-          <a href="https://github.com/0xArbi/cosmos-multi-send" target="_blank">
+          <a
+            href="https://github.com/0xArbi/cosmos-multi-send"
+            target="_blank"
+            rel="noreferrer"
+          >
             <Text fontSize="sm">Open sourced on Github.</Text>
           </a>
         </Stack>
