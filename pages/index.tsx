@@ -262,8 +262,11 @@ export default function Home() {
 
           <Text>
             A utility tool for transferring tokens to a large number of
-            recipients. Works with CW20 tokens as well as native assets.
+            recipients, works with CW20 tokens as well as native assets.
           </Text>
+          <a href="https://github.com/0xArbi/cosmos-multi-send" target="_blank">
+            <Text fontSize="sm">Open sourced on Github.</Text>
+          </a>
         </Stack>
 
         <Stack gap={4}>
@@ -312,7 +315,7 @@ export default function Home() {
                           )
                         )
                       }
-                      borderColor={validAddress ? "" : "red"}
+                      borderColor={validAddress ? undefined : "red"}
                     />
                     <Input
                       placeholder="Amount"
@@ -324,7 +327,7 @@ export default function Home() {
                           )
                         )
                       }
-                      borderColor={validAmount ? "" : "red"}
+                      borderColor={validAmount ? undefined : "red"}
                     />
                     <Button
                       onClick={() =>
