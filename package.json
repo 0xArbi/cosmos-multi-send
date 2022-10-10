@@ -21,6 +21,7 @@
     "@juno-network/assets": "0.11.1",
     "bignumber.js": "9.1.0",
     "chain-registry": "1.0.0",
+    "framer-motion": "^7.5.3",
     "juno-network": "0.5.3",
     "next": "12.2.5",
     "react": "18.2.0",
