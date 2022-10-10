@@ -1,8 +1,9 @@
 import { Asset, AssetList } from "@chain-registry/types";
 import { StdFee } from "@cosmjs/amino";
+import { fromBech32 } from "@cosmjs/encoding";
 import { useWallet } from "@cosmos-kit/react";
 import BigNumber from "bignumber.js";
-import { assets as allAssets } from "chain-registry";
+import { assets as allAssets, chains as allChains } from "chain-registry";
 import { useEffect, useMemo, useState } from "react";
 import SelectSearch from "react-select-search";
 import "react-select-search/style.css";
@@ -22,6 +23,7 @@ import { SigningCosmWasmClient } from "@cosmjs/cosmwasm-stargate";
 import { cosmos } from "juno-network";
 import Head from "next/head";
 import { WalletSection } from "../components";
+import { chain } from "@juno-network/assets";
 
 const FILTERED_CHAINS = [
   "avalanche",
@@ -54,10 +56,12 @@ function fromBase(amount: string, asset: Asset) {
 function toBase(amount: string, asset: Asset) {
   const exp = asset.denom_units.find((unit) => unit.denom === asset.display)
     ?.exponent as number;
+  return toBaseDirect(amount, exp);
+}
 
+function toBaseDirect(amount: string, decimals: number) {
   const a = new BigNumber(amount);
-  console.log("toBase", amount, a.multipliedBy(10 ** exp).toString());
-  return a.multipliedBy(10 ** exp).toString();
+  return a.multipliedBy(10 ** decimals).toString();
 }
 
 export default function Home() {
@@ -77,7 +81,8 @@ export default function Home() {
     for (const chain of assets) {
       for (const asset of chain.assets) {
         if (search === assetId(chain, asset)) {
-          return { chain, asset };
+          const c = allChains.find((x) => x.chain_name === chain.chain_name)!;
+          return { chain: c, asset };
         }
       }
     }
@@ -85,6 +90,7 @@ export default function Home() {
   const [recipients, setRecipients] = useState([{ address: "", amount: "" }]);
   const [balance, setBalance] = useState("0");
   const toast = useToast();
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (asset) {
@@ -112,7 +118,6 @@ export default function Home() {
           rpcEndpoint,
         });
 
-        // fetch balance
         const balance = await client.cosmos.bank.v1beta1.balance({
           address: currentWallet.address,
           denom: asset.asset.base,
@@ -136,7 +141,6 @@ export default function Home() {
     }
 
     getBalance().catch((e) => {
-      console.log(e);
       setBalance("0");
     });
   }, [currentWallet, asset, getStargateClient]);
@@ -146,87 +150,102 @@ export default function Home() {
       return;
     }
 
-    if (!asset.asset.address) {
-      const stargateClient = await getStargateClient();
-      if (!stargateClient || !address) {
-        console.error("stargateClient undefined or address undefined.");
-        return;
+    try {
+      setSubmitting(true);
+
+      const gasDenom = asset.chain.fees?.fee_tokens[0].denom;
+      const gasAmount = asset.chain.fees?.fee_tokens[0].average_gas_price;
+
+      if (!gasAmount || !gasDenom) {
+        throw new Error("Unable to calculate gas");
       }
 
-      const { send } = cosmos.bank.v1beta1.MessageComposer.withTypeUrl;
-
-      const messages = recipients.map(({ address, amount }) =>
-        send({
-          amount: [
-            {
-              denom: asset.asset.base,
-              amount: toBase(amount, asset.asset),
-            },
-          ],
-          toAddress: address,
-          fromAddress: currentWallet.address,
-        })
-      );
-
       const fee: StdFee = {
+        gas: (
+          (asset.asset.address ? 160_000 : 30_000) * recipients.length
+        ).toString(),
         amount: [
           {
-            denom: asset.asset.base,
-            amount: "2000",
+            amount: toBaseDirect(gasAmount.toString(), 6),
+            denom: gasDenom,
           },
         ],
-        gas: (30_000 * messages.length).toString(),
       };
 
-      const response = await stargateClient.signAndBroadcast(
-        address,
-        messages,
-        fee
-      );
-      toast({
-        title: "Funds sent",
-        status: "success",
-        description: `https://mintscan.io/${asset.chain.chain_name}/${response.transactionHash}`,
-      });
-    } else {
-      const client: SigningCosmWasmClient =
-        await currentWallet.getCosmWasmClient();
+      let transactionHash: string | null = null;
+      if (!asset.asset.address) {
+        const stargateClient = await getStargateClient();
+        if (!stargateClient || !address) {
+          throw new Error("Unable to get wallet");
+        }
 
-      const fee: StdFee = {
-        amount: [
-          {
-            denom: asset.asset.base,
-            amount: "2000",
-          },
-        ],
-        gas: (120_000 * recipients.length).toString(),
-      };
-      const result = await client.executeMultiple(
-        currentWallet.address,
-        recipients.map(({ address, amount }) => ({
-          contractAddress: asset.asset.address!,
-          msg: {
-            transfer: {
-              recipient: address,
-              amount: toBase(amount, asset.asset),
+        const messages = recipients.map(({ address, amount }) =>
+          cosmos.bank.v1beta1.MessageComposer.withTypeUrl.send({
+            amount: [
+              {
+                denom: asset.asset.base,
+                amount: toBase(amount, asset.asset),
+              },
+            ],
+            toAddress: address,
+            fromAddress: currentWallet.address,
+          })
+        );
+
+        const result = await stargateClient.signAndBroadcast(
+          address,
+          messages,
+          fee
+        );
+        transactionHash = result.transactionHash;
+      } else {
+        const client: SigningCosmWasmClient =
+          await currentWallet.getCosmWasmClient();
+
+        const result = await client.executeMultiple(
+          currentWallet.address,
+          recipients.map(({ address, amount }) => ({
+            contractAddress: asset.asset.address!,
+            msg: {
+              transfer: {
+                recipient: address,
+                amount: toBase(amount, asset.asset),
+              },
             },
-          },
-        })),
-        fee,
-        "auto"
-      );
-      toast({
-        status: "success",
-        title: "Funds sent",
-        description: `https://mintscan.io/${asset.chain.chain_name}/${result.transactionHash}`,
-      });
+          })),
+          fee
+        );
+        transactionHash = result.transactionHash;
+      }
+      if (transactionHash) {
+        const explorer =
+          asset.chain.explorers?.find((x) => x.kind === "mintscan") ??
+          asset.chain.explorers?.[0];
+        toast({
+          status: "success",
+          title: "Funds sent",
+          description:
+            explorer?.tx_page?.replace("${txHash}", transactionHash) ??
+            undefined,
+        });
+      }
+    } catch (e: any) {
+      toast({ status: "error", title: e.message });
+    } finally {
+      setSubmitting(false);
     }
   };
+
+  const total = recipients.reduce(
+    (total, x) => total + parseFloat(x.amount || "0"),
+    0
+  );
+  const invalidTotal = total > parseFloat(balance);
 
   return (
     <Container maxW="2xl" py={10}>
       <Head>
-        <title>Multi Send</title>
+        <title>multi-send</title>
         <meta name="description" content="Generated by create cosmos app" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
@@ -270,42 +289,56 @@ export default function Home() {
           <Flex direction="column">
             <Stack gap={0}>
               <Text fontWeight="medium">Recipients</Text>
-              {recipients.map(({ address, amount }, index) => (
-                <Flex gap={4} mb={2} key={address}>
-                  <Input
-                    placeholder="Address"
-                    value={address}
-                    onChange={(e) =>
-                      setRecipients((o) =>
-                        o.map((x, i) =>
-                          i === index ? { ...x, address: e.target.value } : x
+              {recipients.map(({ address, amount }, index) => {
+                let validAddress = true;
+                try {
+                  if (address && asset) {
+                    validAddress =
+                      fromBech32(address).prefix == asset?.chain.bech32_prefix;
+                  }
+                } catch {
+                  validAddress = false;
+                }
+                let validAmount = !amount || !isNaN(parseFloat(amount));
+                return (
+                  <Flex gap={4} mb={2} key={`input-${index}`}>
+                    <Input
+                      placeholder="Address"
+                      value={address}
+                      onChange={(e) =>
+                        setRecipients((o) =>
+                          o.map((x, i) =>
+                            i === index ? { ...x, address: e.target.value } : x
+                          )
                         )
-                      )
-                    }
-                  />
-                  <Input
-                    placeholder="Amount"
-                    value={amount}
-                    onChange={(e) =>
-                      setRecipients((o) =>
-                        o.map((x, i) =>
-                          i === index ? { ...x, amount: e.target.value } : x
+                      }
+                      borderColor={validAddress ? "" : "red"}
+                    />
+                    <Input
+                      placeholder="Amount"
+                      value={amount}
+                      onChange={(e) =>
+                        setRecipients((o) =>
+                          o.map((x, i) =>
+                            i === index ? { ...x, amount: e.target.value } : x
+                          )
                         )
-                      )
-                    }
-                  />
-                  <Button
-                    onClick={() =>
-                      setRecipients((o) =>
-                        o.filter((_, i) => (i === index ? false : true))
-                      )
-                    }
-                    disabled={recipients.length === 1}
-                  >
-                    X
-                  </Button>
-                </Flex>
-              ))}
+                      }
+                      borderColor={validAmount ? "" : "red"}
+                    />
+                    <Button
+                      onClick={() =>
+                        setRecipients((o) =>
+                          o.filter((_, i) => (i === index ? false : true))
+                        )
+                      }
+                      disabled={recipients.length === 1}
+                    >
+                      X
+                    </Button>
+                  </Flex>
+                );
+              })}
               <Button
                 alignSelf="flex-end"
                 onClick={() =>
@@ -317,25 +350,27 @@ export default function Home() {
             </Stack>
           </Flex>
 
-          {asset && (
-            <Stack direction="row" justify="space-between">
-              <Text fontWeight="medium">Balance</Text>
-              <Text>{`${balance} ${asset?.asset.symbol}`}</Text>
-            </Stack>
-          )}
+          <Stack>
+            {asset && (
+              <Stack direction="row" justify="space-between">
+                <Text fontWeight="medium">Balance</Text>
+                <Text>{`${balance} ${asset?.asset.symbol}`}</Text>
+              </Stack>
+            )}
 
-          <Stack direction="row" justify="space-between">
-            <Text fontWeight="medium">Total</Text>
-            <Text>
-              {recipients.reduce(
-                (total, x) => total + parseFloat(x.amount || "0"),
-                0
-              )}{" "}
-              {asset?.asset.symbol}
-            </Text>
+            <Stack direction="row" justify="space-between">
+              <Text fontWeight="medium">Total</Text>
+              <Text color={invalidTotal ? "red" : ""}>
+                {total} {asset?.asset.symbol}
+              </Text>
+            </Stack>
           </Stack>
 
-          <Button onClick={sendTokens} disabled={!currentWallet}>
+          <Button
+            onClick={sendTokens}
+            disabled={!currentWallet || invalidTotal || submitting}
+            isLoading={submitting}
+          >
             Submit
           </Button>
         </Stack>
