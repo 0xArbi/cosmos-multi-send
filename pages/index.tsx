@@ -71,7 +71,6 @@ export default function Home() {
     currentWallet,
     currentChainName,
     connect,
-    update,
     getCosmWasmClient,
   } = useWallet();
 
@@ -95,7 +94,8 @@ export default function Home() {
     if (asset) {
       setCurrentChain(asset.chain.chain_name);
       connect();
-      update();
+    } else {
+      setCurrentChain("juno");
     }
   }, [asset]);
 

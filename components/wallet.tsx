@@ -34,7 +34,7 @@ export const WalletSection = ({ chainName }: { chainName?: ChainName }) => {
     e.preventDefault();
     openView();
     if (currentWalletName) {
-      await connect();
+      connect();
     }
   };
 

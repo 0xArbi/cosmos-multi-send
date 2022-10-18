@@ -9,7 +9,12 @@ import "../styles.css";
 function CreateCosmosApp({ Component, pageProps }: AppProps) {
   return (
     <ChakraProvider theme={defaultTheme}>
-      <WalletProvider chains={chains} assetLists={assets} wallets={wallets}>
+      <WalletProvider
+        chains={chains}
+        assetLists={assets}
+        // @ts-expect-error
+        wallets={wallets}
+      >
         <Component {...pageProps} />
       </WalletProvider>
     </ChakraProvider>
