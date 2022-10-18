@@ -322,11 +322,13 @@ export default function Home() {
                           )
                         )
                       }
+                      backgroundColor="white"
                       borderColor={validAddress ? undefined : "red"}
                     />
                     <Input
                       placeholder="Amount"
                       value={amount}
+                      backgroundColor="white"
                       onChange={(e) =>
                         setRecipients((o) =>
                           o.map((x, i) =>
