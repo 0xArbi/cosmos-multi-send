@@ -200,8 +200,10 @@ export default function Home() {
         );
         transactionHash = result.transactionHash;
       } else {
-        const client: SigningCosmWasmClient =
-          await currentWallet.getCosmWasmClient();
+        const client = await getCosmWasmClient();
+        if (!client) {
+          throw new Error("unable to connect to network");
+        }
 
         const result = await client.executeMultiple(
           currentWallet.address,
