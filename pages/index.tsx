@@ -349,8 +349,9 @@ export default function Home() {
                   </Flex>
                 );
               })}
-              <Stack direction="row" justify="flex-end">
+              <Stack direction="row" justify="flex-end" align="center">
                 <Input
+                  pt={1}
                   type="file"
                   size="sm"
                   placeholder="CSV file"
