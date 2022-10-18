@@ -106,16 +106,18 @@ export default function Home() {
       }
 
       if (!asset?.asset.address) {
+        console.log("getting client (no address)");
         let rpcEndpoint = await currentWallet?.getRpcEndpoint();
         if (!rpcEndpoint) {
           console.log("no rpc endpoint — using a fallback");
           rpcEndpoint = `https://rpc.cosmos.directory/${asset.chain.chain_name}`;
         }
-
+        console.log("got rpc");
         // get RPC client
         const client = await cosmos.ClientFactory.createRPCQueryClient({
           rpcEndpoint,
         });
+        console.log("got client");
 
         const balance = await client.cosmos.bank.v1beta1.balance({
           address: currentWallet.address,
@@ -124,13 +126,13 @@ export default function Home() {
 
         setBalance(fromBase(balance.balance.amount, asset.asset));
       } else if (asset.asset.address) {
+        console.log("getting wasm client", currentWallet);
         const client = await getCosmWasmClient();
-        console.log(asset.asset.address, {
-          balance: { address: currentWallet.address },
-        });
+        console.log("got wasm client");
         const result = await client?.queryContractSmart(asset.asset.address, {
           balance: { address: currentWallet.address },
         });
+        console.log(result);
         if (!result) {
           return;
         }
@@ -142,7 +144,7 @@ export default function Home() {
     getBalance().catch((e) => {
       setBalance("0");
     });
-  }, [currentWallet, asset, getStargateClient]);
+  }, [currentWallet, asset, getStargateClient, getCosmWasmClient]);
 
   const sendTokens = async () => {
     if (!asset || !currentWallet) {
