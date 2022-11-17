@@ -1,13 +1,4 @@
 import { Asset, AssetList } from "@chain-registry/types";
-import { StdFee } from "@cosmjs/amino";
-import { fromBech32 } from "@cosmjs/encoding";
-import { useWallet } from "@cosmos-kit/react";
-import BigNumber from "bignumber.js";
-import { assets as allAssets, chains as allChains } from "chain-registry";
-import { useEffect, useMemo, useState } from "react";
-import SelectSearch from "react-select-search";
-import "react-select-search/style.css";
-
 import {
   Box,
   Button,
@@ -16,12 +7,20 @@ import {
   Input,
   Stack,
   Text,
-  useToast,
 } from "@chakra-ui/react";
-
-import { SigningCosmWasmClient } from "@cosmjs/cosmwasm-stargate";
+import { StdFee } from "@cosmjs/amino";
+import { fromBech32 } from "@cosmjs/encoding";
+import { useWallet } from "@cosmos-kit/react";
+import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/solid";
+import BigNumber from "bignumber.js";
+import { assets as allAssets, chains as allChains } from "chain-registry";
 import { cosmos } from "juno-network";
 import Head from "next/head";
+import { useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
+import SelectSearch from "react-select-search";
+import "react-select-search/style.css";
+
 import { WalletSection } from "../components";
 
 const FILTERED_CHAINS = [
@@ -31,6 +30,7 @@ const FILTERED_CHAINS = [
   "moonbeam",
   "polygon",
   "terra",
+  "binancesmartchain",
 ];
 const assets = allAssets.filter(
   (x) =>
@@ -87,7 +87,6 @@ export default function Home() {
   }, [search]);
   const [recipients, setRecipients] = useState([{ address: "", amount: "" }]);
   const [balance, setBalance] = useState("0");
-  const toast = useToast();
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -154,21 +153,23 @@ export default function Home() {
     try {
       setSubmitting(true);
 
+      const nativeAsset = allAssets.find(
+        (x) => x.chain_name === asset.chain.chain_name
+      )?.assets[0].denom_units[1].denom;
       const gasDenom = asset.chain.fees?.fee_tokens[0].denom;
-      const gasAmount = asset.chain.fees?.fee_tokens[0].average_gas_price;
+      const gasAmount =
+        asset.chain.fees?.fee_tokens[0].average_gas_price ?? "0";
 
-      if (!gasAmount || !gasDenom) {
-        throw new Error("Unable to calculate gas");
-      }
+      const denom = gasDenom || nativeAsset;
 
       const fee: StdFee = {
         gas: (
-          (asset.asset.address ? 160_000 : 30_000) * recipients.length
+          (asset.asset.address ? 160_000 : 200_000) * recipients.length
         ).toString(),
         amount: [
           {
             amount: toBaseDirect(gasAmount.toString(), 6),
-            denom: gasDenom,
+            denom: denom!,
           },
         ],
       };
@@ -221,19 +222,28 @@ export default function Home() {
         transactionHash = result.transactionHash;
       }
       if (transactionHash) {
-        const explorer =
+        const link = (
           asset.chain.explorers?.find((x) => x.kind === "mintscan") ??
-          asset.chain.explorers?.[0];
-        toast({
-          status: "success",
-          title: "Funds sent",
-          description:
-            explorer?.tx_page?.replace("${txHash}", transactionHash) ??
-            undefined,
-        });
+          asset.chain.explorers?.[0]
+        )?.tx_page?.replace("${txHash}", transactionHash);
+        toast.success(
+          <div className="flex items-center space-x-2">
+            <span>Funds sent</span>
+            {link && (
+              <a
+                className="underline text-blue-500 cursor-pointer"
+                href={link}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+              </a>
+            )}
+          </div>
+        );
       }
     } catch (e: any) {
-      toast({ status: "error", title: e.message });
+      toast.error(e.message);
     } finally {
       setSubmitting(false);
     }
